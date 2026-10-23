@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тренажёр ЦБК</title>
+<style>
+:root{
+  --bg:#f6f4ef; --card:#ffffff; --ink:#1d1b18; --muted:#6f6a61; --line:#e3ded4;
+  --accent:#2f5d50; --accent-ink:#ffffff; --ok:#2e7d4f; --ok-bg:#e5f3ea; --bad:#b3402e; --bad-bg:#f8e6e2;
+  --cap:#c0562a;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#161513; --card:#201f1c; --ink:#ece8e0; --muted:#a19b90; --line:#36332e;
+    --accent:#7fb8a4; --accent-ink:#10201b; --ok:#7fcf9c; --ok-bg:#1d3226; --bad:#f08f7c; --bad-bg:#3a221d;
+    --cap:#f0a070;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#161513; --card:#201f1c; --ink:#ece8e0; --muted:#a19b90; --line:#36332e;
+  --accent:#7fb8a4; --accent-ink:#10201b; --ok:#7fcf9c; --ok-bg:#1d3226; --bad:#f08f7c; --bad-bg:#3a221d;
+  --cap:#f0a070;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar{max-width:760px;margin:0 auto;padding:10px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.bar h1{font-size:17px;margin:0 auto 0 0;letter-spacing:.2px;white-space:nowrap}
+.bar .btn{padding:7px 10px;font-size:14px}
+.tbl{overflow-x:auto}
+main{max-width:760px;margin:0 auto;padding:16px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.tab{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 12px;border-radius:999px;cursor:pointer;font:inherit;font-size:14px}
+.tab.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px}
+h2{font-size:18px;margin:0 0 10px}
+p.note{color:var(--muted);margin:6px 0 12px;font-size:14px}
+button.btn{font:inherit;border-radius:10px;padding:9px 14px;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink)}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button:disabled{opacity:.5;cursor:default}
+input[type=text],input[type=number],textarea,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px;max-width:100%}
+input[type=number]{width:90px}
+textarea{width:100%;min-height:80px;resize:vertical}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.big{font-size:56px;font-weight:700;text-align:center;letter-spacing:2px;margin:6px 0 2px;font-variant-numeric:tabular-nums;word-break:break-all}
+.ask{text-align:center;color:var(--muted);margin-bottom:12px}
+.answer-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.answer-row input{width:240px;text-align:center}
+.fb{margin-top:12px;padding:10px 12px;border-radius:10px;text-align:center;min-height:1em}
+.fb.ok{background:var(--ok-bg);color:var(--ok)}
+.fb.bad{background:var(--bad-bg);color:var(--bad)}
+.fb:empty{display:none}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}
+th{color:var(--muted);font-weight:600;font-size:13px}
+.cbk-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.cbk-cell{border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center}
+.cbk-cell b{display:block;font-size:24px}
+.cbk-cell span{font-size:20px;letter-spacing:4px;color:var(--cap);font-weight:600}
+.words{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.w{border:1px solid var(--line);border-radius:10px;padding:6px 10px;display:flex;gap:8px;align-items:baseline}
+.w b{min-width:30px;font-variant-numeric:tabular-nums}
+.cap{color:var(--cap);font-weight:700}
+.muted{color:var(--muted)}
+.counter{color:var(--muted);font-size:14px;text-align:center;margin-top:10px}
+.pill{display:inline-block;border-radius:6px;padding:1px 6px;margin:2px;font-size:14px}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.n{border:1px solid var(--line)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:10;overflow:auto}
+.overlay.on{display:flex}
+.modal{background:var(--card);border-radius:14px;padding:18px;max-width:640px;width:100%;border:1px solid var(--line)}
+.hidden{display:none !important}
+@media (max-width:520px){
+  .cbk-grid{grid-template-columns:repeat(5,1fr);gap:5px}
+  .cbk-cell{padding:6px 2px}.cbk-cell b{font-size:20px}.cbk-cell span{font-size:16px;letter-spacing:2px}
+  .big{font-size:44px}
+}
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <h1>Тренажёр ЦБК</h1>
+  <button class="btn ghost" id="statsBtn">Статистика</button>
+  <button class="btn ghost" id="refBtn">Таблица</button>
+</div></header>
+
+<main>
+  <div class="tabs">
+    <button class="tab on" data-mode="m1">1. Буквы ЦБК</button>
+    <button class="tab" data-mode="m2">2. Слова</button>
+    <button class="tab" data-mode="m3">3. Фразы</button>
+  </div>
+
+  <!-- MODE 1 -->
+  <section id="m1">
+    <div class="card" id="m1-learn">
+      <h2>Выучите соответствия</h2>
+      <p class="note">Каждой цифре соответствуют две согласные. Гласные, Й, Ь и Ъ не считаются.</p>
+      <div class="cbk-grid" id="m1-table"></div>
+      <div class="row" style="margin-top:14px">
+        <label class="row"><input type="checkbox" id="m1-d2l" checked> цифра → буквы</label>
+        <label class="row"><input type="checkbox" id="m1-l2d" checked> буква → цифра</label>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="btn" id="m1-start">Начать тест</button></div>
+    </div>
+    <div class="card hidden" id="m1-quiz">
+      <div class="ask" id="m1-ask"></div>
+      <div class="big" id="m1-q"></div>
+      <form class="answer-row" id="m1-form" autocomplete="off">
+        <input type="text" id="m1-in" autocapitalize="off" spellcheck="false">
+        <button class="btn" type="submit">Ответить</button>
+      </form>
+      <div class="fb" id="m1-fb"></div>
+      <div class="row" style="justify-content:center;margin-top:14px">
+        <button class="btn ghost" id="m1-stop">Хватит</button>
+      </div>
+      <div class="counter" id="m1-count"></div>
+    </div>
+  </section>
+
+  <!-- MODE 2 -->
+  <section id="m2" class="hidden">
+    <div class="card" id="m2-setup">
+      <h2>Какие числа учим</h2>
+      <div class="row">
+        <label>от <input type="number" id="m2-from" min="1" max="100" value="1"></label>
+        <label>до <input type="number" id="m2-to" min="1" max="100" value="5"></label>
+        <button class="btn" id="m2-show">Показать список</button>
+      </div>
+    </div>
+    <div class="card hidden" id="m2-learn">
+      <h2>Запомните</h2>
+      <p class="note">Заглавные буквы и есть код числа. Когда будете готовы, начните тест: числа пойдут в случайном порядке, пока не нажмёте «Хватит».</p>
+      <div class="words" id="m2-list"></div>
+      <p class="note" id="m2-missing"></p>
+      <div class="row" style="margin-top:12px"><button class="btn" id="m2-start">Начать тест</button></div>
+    </div>
+    <div class="card hidden" id="m2-quiz">
+      <div class="ask">Напишите слово для числа</div>
+      <div class="big" id="m2-q"></div>
+      <form class="answer-row" id="m2-form" autocomplete="off">
+        <input type="text" id="m2-in" autocapitalize="off" spellcheck="false">
+        <button class="btn" type="submit">Ответить</button>
+      </form>
+      <div class="fb" id="m2-fb"></div>
+      <div class="row" style="justify-content:center;margin-top:14px">
+        <button class="btn ghost" id="m2-stop">Хватит</button>
+      </div>
+      <div class="counter" id="m2-count"></div>
+    </div>
+  </section>
+
+  <!-- MODE 3 -->
+  <section id="m3" class="hidden">
+    <div class="card" id="m3-setup">
+      <h2>Фразы из длинных чисел</h2>
+      <p class="note">Число разбивается на куски из списка (1, 2 или 3 цифры). Составьте фразу, в которой по порядку есть слово для каждого куска. Слова можно склонять, а между ними вставлять любые связки («у», «на», «большой»).</p>
+      <div class="row">
+        <label>Длина числа
+          <select id="m3-len">
+            <option value="2">2 цифры</option>
+            <option value="3">3 цифры</option>
+            <option value="4" selected>4 цифры</option>
+            <option value="5">5 цифр</option>
+            <option value="6">6 цифр</option>
+            <option value="8">8 цифр</option>
+            <option value="10">10 цифр</option>
+            <option value="12">12 цифр</option>
+          </select>
+        </label>
+        <button class="btn" id="m3-start">Начать</button>
+      </div>
+    </div>
+    <div class="card hidden" id="m3-quiz">
+      <div class="ask">Составьте фразу для числа</div>
+      <div class="big" id="m3-q"></div>
+      <form id="m3-form" autocomplete="off">
+        <textarea id="m3-in" placeholder="Например: дед ест суп у домика" spellcheck="false"></textarea>
+        <div class="row" style="justify-content:center;margin-top:10px">
+          <button class="btn" type="submit">Проверить</button>
+          <button class="btn ghost" type="button" id="m3-hint">Подсказка</button>
+          <button class="btn ghost" type="button" id="m3-next">Следующее</button>
+        </div>
+      </form>
+      <div class="fb" id="m3-fb"></div>
+      <div class="row" style="justify-content:center;margin-top:14px">
+        <button class="btn ghost" id="m3-stop">Хватит</button>
+      </div>
+      <div class="counter" id="m3-count"></div>
+    </div>
+  </section>
+</main>
+
+<div class="overlay" id="ov"><div class="modal">
+  <div class="row" style="justify-content:space-between;margin-bottom:8px">
+    <h2 id="ov-title" style="margin:0"></h2>
+    <button class="btn ghost" id="ov-close">Закрыть</button>
+  </div>
+  <div id="ov-body"></div>
+</div></div>
+
+<script>
+// ===== Данные из таблицы =====
+const CBK = {1:"ГЖ",2:"ДТ",3:"КХ",4:"ЧЩ",5:"ПБ",6:"ШЛ",7:"СЗ",8:"ВФ",9:"РЦ",0:"НМ"};
+const WORDS = {
+  1:"еЖ",2:"аД",3:"оКа",4:"Щи",5:"оБои",6:"Лай",7:"оСа",8:"еВа",9:"Рой",10:"ЖеНа",
+  11:"ГиГант",12:"ГоД",13:"ГайКа",14:"ЖуЧок",15:"ЖаБо",16:"ГЛаз",17:"ГаЗель",18:"ГуВернантка",19:"ГаРаж",20:"ДоМ",
+  21:"ДоЖдь",22:"ДеД",23:"ДоКлад",24:"ДаЧа",25:"ДуБ",26:"ДуШ",27:"ДеСерт",28:"ДиВан",29:"ТоРт",30:"КоМар",
+  31:"КеГли",32:"КоД",33:"КуКушка",34:"КоЧка",35:"КаПа",36:"КоШка",37:"КоСтер",38:"КВас",39:"КаРта",40:"ЧеМодан",
+  41:"ЧуГун",42:"ЧуДо",43:"ЧеК",44:"ЧаЩа",45:"ЧиП",46:"ЧашКа",47:"ЧаСы",48:"ЧиФир",49:"ЧеРдак",50:"ПоНи",
+  51:"ПуГало",52:"ПеДаль",53:"ПуХ",54:"ПеЧка",55:"ПаПа",56:"ПуЛя",57:"ПеСок",58:"ПаВлин",59:"ПеРец",60:"ШиНа",
+  61:"ШаГ",62:"ШТраф",63:"ШоКолад",64:"ЛуЧ",65:"ШаПка",66:"ШЛюпка",67:"ШоСсе",68:"ШоФер",69:"ШаР",70:"СоН",
+  71:"СиГарета",72:"СаД",73:"СоК",74:"СоЧи",75:"СуП",76:"СЛон",77:"СоуС",78:"СВадьба",79:"СаРафан",80:"ВаНна",
+  81:"ВаГон",82:"ВоДа",83:"ВоКзал",84:"ВеЧер",85:"ВоПль",86:"ВиЛка",87:"ВаЗа",88:"ВаФля",89:"ВаРенье",90:"РюМка",
+  91:"РуЖьё",92:"РоТ",93:"РеКа",94:"РуЧка",95:"РоБот",96:"РуЛь",97:"РоЗа",98:"РёВ",99:"ЦаРь",100:"МаМа"
+};
+
+// ===== Утилиты =====
+const $ = id => document.getElementById(id);
+const norm = s => (s||"").toLowerCase().replace(/ё/g,"е").replace(/[^а-яa-z0-9]/g,"");
+const show = (el, on) => el.classList.toggle("hidden", !on);
+const rnd = a => a[Math.floor(Math.random()*a.length)];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function capHtml(w){ // заглавные буквы — код
+  return [...w].map(ch => (ch !== ch.toLowerCase()) ? `<span class="cap">${ch}</span>` : ch).join("");
+}
+function pickNext(pool, last){ // случайно, без повтора подряд
+  if (pool.length < 2) return pool[0];
+  let x; do { x = rnd(pool); } while (x === last); return x;
+}
+
+// ===== Вкладки =====
+let mode = "m1";
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  mode = t.dataset.mode;
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  ["m1","m2","m3"].forEach(m => show($(m), m === mode));
+});
+
+// ===== Оверлей =====
+function openOv(title, html){ $("ov-title").textContent = title; $("ov-body").innerHTML = html; $("ov").classList.add("on"); }
+$("ov-close").onclick = () => $("ov").classList.remove("on");
+$("ov").onclick = e => { if (e.target === $("ov")) $("ov").classList.remove("on"); };
+
+function cbkGridHtml(){
+  return `<div class="cbk-grid">` + [1,2,3,4,5,6,7,8,9,0].map(d =>
+    `<div class="cbk-cell"><b>${d}</b><span>${CBK[d]}</span></div>`).join("") + `</div>`;
+}
+$("m1-table").innerHTML = cbkGridHtml();
+$("refBtn").onclick = () => {
+  const words = Object.keys(WORDS).map(Number).filter(n => WORDS[n])
+    .map(n => `<div class="w"><b>${n}</b><span>${capHtml(WORDS[n])}</span></div>`).join("");
+  openOv("Таблица", cbkGridHtml() + `<h2 style="margin-top:16px">Слова</h2><div class="words">${words}</div>`);
+};
+
+// ===== Статистика =====
+const stats = { m1: {}, m2: {}, m3: [] };
+function bump(obj, key, ok){
+  obj[key] = obj[key] || { n:0, ok:0, wrong:[] };
+  obj[key].n++; if (ok) obj[key].ok++;
+}
+function statTable(obj, keyTitle, sortFn){
+  const keys = Object.keys(obj).sort(sortFn);
+  if (!keys.length) return `<p class="muted">В этой сессии ещё не было вопросов.</p>`;
+  let tn = 0, tok = 0;
+  const rows = keys.map(k => {
+    const s = obj[k]; tn += s.n; tok += s.ok;
+    const wrong = s.wrong.length ? s.wrong.map(w => `<span class="pill bad">${esc(w)}</span>`).join("") : "";
+    return `<tr><td><b>${esc(s.label || k)}</b></td><td>${s.n}</td><td>${s.ok}</td><td>${s.n - s.ok}</td><td>${wrong}</td></tr>`;
+  }).join("");
+  return `<p>Всего ответов: <b>${tn}</b>, верно: <b>${tok}</b> (${tn ? Math.round(tok*100/tn) : 0}%)</p>
+    <div class="tbl"><table><tr><th>${keyTitle}</th><th>Раз</th><th>Верно</th><th>Ошибок</th><th>Что ввели</th></tr>${rows}</table></div>`;
+}
+$("statsBtn").onclick = () => {
+  if (mode === "m1") openOv("Статистика: буквы ЦБК", statTable(stats.m1, "Вопрос", (a,b)=>a.localeCompare(b,"ru")));
+  if (mode === "m2") openOv("Статистика: слова", statTable(stats.m2, "Число", (a,b)=>a-b));
+  if (mode === "m3") {
+    const h = stats.m3;
+    if (!h.length) return openOv("Статистика: фразы", `<p class="muted">В этой сессии ещё не было вопросов.</p>`);
+    const ok = h.filter(x => x.ok).length;
+    const rows = h.map(x => `<tr><td><b>${x.num}</b></td><td>${x.ok ? '<span class="pill ok">верно</span>' : '<span class="pill bad">неверно</span>'}</td><td>${esc(x.phrase)}</td></tr>`).join("");
+    openOv("Статистика: фразы", `<p>Попыток: <b>${h.length}</b>, верно: <b>${ok}</b></p><div class="tbl"><table><tr><th>Число</th><th>Итог</th><th>Фраза</th></tr>${rows}</table></div>`);
+  }
+};
+
+// ===== Режим 1: буквы ЦБК =====
+const LETTER2DIGIT = {};
+Object.entries(CBK).forEach(([d, ls]) => [...ls].forEach(l => LETTER2DIGIT[l] = d));
+let m1cur = null, m1last = null, m1answered = false;
+function m1next(){
+  const types = [];
+  if ($("m1-d2l").checked) types.push("d2l");
+  if ($("m1-l2d").checked) types.push("l2d");
+  const t = rnd(types);
+  let q;
+  if (t === "d2l") q = { t, key: pickNext("1234567890".split(""), m1last && m1last.split(":")[1]) };
+  else q = { t, key: pickNext(Object.keys(LETTER2DIGIT), m1last && m1last.split(":")[1]) };
+  m1cur = q; m1last = t + ":" + q.key; m1answered = false;
+  $("m1-ask").textContent = t === "d2l" ? "Какие две буквы у этой цифры?" : "Какая цифра у этой буквы?";
+  $("m1-q").textContent = q.key;
+  $("m1-in").value = ""; $("m1-in").placeholder = t === "d2l" ? "две буквы, например гж" : "цифра";
+  $("m1-in").inputMode = t === "d2l" ? "text" : "numeric";
+  $("m1-fb").textContent = ""; $("m1-fb").className = "fb";
+  $("m1-in").focus();
+}
+$("m1-start").onclick = () => {
+  if (!$("m1-d2l").checked && !$("m1-l2d").checked) $("m1-d2l").checked = true;
+  show($("m1-learn"), false); show($("m1-quiz"), true); m1next(); m1count();
+};
+$("m1-stop").onclick = () => { show($("m1-quiz"), false); show($("m1-learn"), true); $("statsBtn").click(); };
+function m1count(){ let n=0, ok=0; Object.values(stats.m1).forEach(s => { n+=s.n; ok+=s.ok; }); $("m1-count").textContent = `Ответов: ${n}, верно: ${ok}`; }
+$("m1-form").onsubmit = e => {
+  e.preventDefault();
+  if (m1answered) { m1next(); return; }
+  const raw = $("m1-in").value.trim(); if (!raw) return;
+  const { t, key } = m1cur; let ok, right, label;
+  if (t === "d2l") {
+    const got = [...new Set(norm(raw).toUpperCase().split(""))].sort().join("");
+    right = CBK[key]; ok = got === [...right].sort().join(""); label = `${key} → ?`;
+  } else {
+    right = LETTER2DIGIT[key]; ok = norm(raw) === right; label = `${key} → ?`;
+  }
+  bump(stats.m1, label, ok); stats.m1[label].label = t === "d2l" ? `цифра ${key}` : `буква ${key}`;
+  if (!ok) stats.m1[label].wrong.push(raw);
+  m1answered = true;
+  const fb = $("m1-fb");
+  fb.className = "fb " + (ok ? "ok" : "bad");
+  fb.innerHTML = (ok ? "Верно! " : `Неверно. Правильно: <b>${right}</b>. `) + `<span class="muted">Enter — дальше</span>`;
+  m1count();
+  if (ok) setTimeout(() => { if (m1answered && m1cur.key === key) m1next(); }, 700);
+};
+
+// ===== Режим 2: слова =====
+let m2pool = [], m2cur = null, m2answered = false;
+$("m2-show").onclick = () => {
+  let a = Math.max(1, Math.min(100, +$("m2-from").value || 1));
+  let b = Math.max(1, Math.min(100, +$("m2-to").value || 1));
+  if (a > b) [a, b] = [b, a];
+  $("m2-from").value = a; $("m2-to").value = b;
+  m2pool = []; const missing = [];
+  for (let n = a; n <= b; n++) (WORDS[n] ? m2pool : missing).push(n);
+  $("m2-list").innerHTML = m2pool.map(n => `<div class="w"><b>${n}</b><span>${capHtml(WORDS[n])}</span></div>`).join("");
+  $("m2-missing").textContent = missing.length ? `Нет слова в таблице: ${missing.join(", ")} (пропускаю).` : "";
+  show($("m2-learn"), true); show($("m2-quiz"), false);
+  $("m2-start").disabled = !m2pool.length;
+};
+$("m2-start").onclick = () => { show($("m2-setup"), false); show($("m2-learn"), false); show($("m2-quiz"), true); m2next(); m2count(); };
+$("m2-stop").onclick = () => { show($("m2-quiz"), false); show($("m2-setup"), true); show($("m2-learn"), true); $("statsBtn").click(); };
+function m2next(){
+  m2cur = pickNext(m2pool, m2cur); m2answered = false;
+  $("m2-q").textContent = m2cur; $("m2-in").value = "";
+  $("m2-fb").textContent = ""; $("m2-fb").className = "fb"; $("m2-in").focus();
+}
+function m2count(){ let n=0, ok=0; Object.values(stats.m2).forEach(s => { n+=s.n; ok+=s.ok; }); $("m2-count").textContent = `Ответов: ${n}, верно: ${ok}`; }
+$("m2-form").onsubmit = e => {
+  e.preventDefault();
+  if (m2answered) { m2next(); return; }
+  const raw = $("m2-in").value.trim(); if (!raw) return;
+  const ok = norm(raw) === norm(WORDS[m2cur]);
+  bump(stats.m2, m2cur, ok); if (!ok) stats.m2[m2cur].wrong.push(raw);
+  m2answered = true;
+  const fb = $("m2-fb"); fb.className = "fb " + (ok ? "ok" : "bad");
+  fb.innerHTML = (ok ? "Верно! " : `Неверно. Правильно: <b>${capHtml(WORDS[m2cur])}</b>. `) + `<span class="muted">Enter — дальше</span>`;
+  m2count();
+  const cur = m2cur;
+  if (ok) setTimeout(() => { if (m2answered && m2cur === cur) m2next(); }, 700);
+};
+
+// ===== Режим 3: фразы =====
+// Куски числа: каждое слово из таблицы кодирует свою строку цифр. «МаМа» = 100, а также 00 по ЦБК.
+const PIECES = [];
+Object.entries(WORDS).forEach(([n, w]) => { if (w) PIECES.push({ digits: String(n), word: w }); });
+PIECES.push({ digits: "00", word: "МаМа" });
+
+// Разбор числа на куски (все варианты не нужны — одного достаточно для подсказки)
+function decompose(num){
+  const memo = {};
+  function go(i){
+    if (i === num.length) return [];
+    if (i in memo) return memo[i];
+    const opts = PIECES.filter(p => num.startsWith(p.digits, i)).sort(() => Math.random() - .5);
+    for (const p of opts) { const rest = go(i + p.digits.length); if (rest) return memo[i] = [p, ...rest]; }
+    return memo[i] = null;
+  }
+  return go(0);
+}
+function genNumber(len){
+  for (let t = 0; t < 5000; t++) {
+    let s = String(1 + Math.floor(Math.random()*9));
+    while (s.length < len) s += Math.floor(Math.random()*10);
+    if (decompose(s)) return s;
+  }
+  return null;
+}
+
+// Сопоставление слова фразы со словом таблицы с учётом склонений
+const VOW = "аеиоуыэюяьй";
+const IGN = new Set(["й","ь","ъ"]);
+const skel = w => [...w].filter(c => !"аеиоуыэюя".includes(c) && !IGN.has(c)).join("");
+function matches(token, word){
+  const t = norm(token), w = norm(word);
+  if (t === w) return true;
+  let stem = w;
+  if (stem.length >= 3 && VOW.includes(stem[stem.length-1])) stem = stem.slice(0, -1);
+  if (stem.length < 2 || !t.startsWith(stem) || t.length > w.length + 3) return false;
+  const st = skel(t), sw = skel(w);
+  if (!st.startsWith(sw)) return false;
+  const extra = st.slice(sw.length);
+  return extra.length <= 1 && (extra === "" || "мхв".includes(extra));
+}
+function parsePhrase(text){
+  const tokens = text.split(/[^А-Яа-яЁё]+/).filter(Boolean);
+  return tokens.map(tok => {
+    let best = null;
+    for (const p of PIECES) {
+      if (p.digits === "00") continue; // «мама» показываем как 100, но допускаем и 00 ниже
+      if (matches(tok, p.word) && (!best || norm(p.word).length > norm(best.word).length)) best = p;
+    }
+    return { tok, piece: best };
+  });
+}
+// Проверка: слова-ключи по порядку должны дать ровно это число («мама» может быть 100 или 00)
+function checkPhrase(num, parsed){
+  const keys = parsed.filter(x => x.piece);
+  function go(i, pos){
+    if (i === keys.length) return pos === num.length;
+    const p = keys[i].piece;
+    const variants = norm(p.word) === "мама" ? ["100", "00"] : [p.digits];
+    return variants.some(d => num.startsWith(d, pos) && go(i + 1, pos + d.length));
+  }
+  return go(0, 0);
+}
+
+let m3num = null, m3done = false;
+$("m3-start").onclick = () => { show($("m3-setup"), false); show($("m3-quiz"), true); m3next(); m3count(); };
+$("m3-stop").onclick = () => { show($("m3-quiz"), false); show($("m3-setup"), true); $("statsBtn").click(); };
+$("m3-next").onclick = () => m3next();
+function m3next(){
+  m3num = genNumber(+$("m3-len").value); m3done = false;
+  $("m3-q").textContent = m3num; $("m3-in").value = "";
+  $("m3-fb").textContent = ""; $("m3-fb").className = "fb"; $("m3-in").focus();
+}
+function m3count(){ const h = stats.m3; $("m3-count").textContent = `Попыток: ${h.length}, верно: ${h.filter(x=>x.ok).length}`; }
+$("m3-hint").onclick = () => {
+  const d = decompose(m3num);
+  const fb = $("m3-fb"); fb.className = "fb";
+  fb.style.background = "var(--bg)";
+  fb.innerHTML = "Один из вариантов: " + d.map(p => `<span class="pill n">${p.digits} — ${capHtml(p.word)}</span>`).join(" ");
+};
+$("m3-in").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("m3-form").requestSubmit(); } });
+$("m3-form").onsubmit = e => {
+  e.preventDefault();
+  const text = $("m3-in").value.trim(); if (!text) return;
+  if (m3done) { m3next(); return; }
+  const parsed = parsePhrase(text);
+  const ok = checkPhrase(m3num, parsed);
+  stats.m3.push({ num: m3num, phrase: text, ok });
+  const fb = $("m3-fb"); fb.style.background = "";
+  const read = parsed.map(x => x.piece
+    ? `<span class="pill ${ok ? "ok" : "n"}">${esc(x.tok)} = ${norm(x.piece.word) === "мама" ? "100/00" : x.piece.digits}</span>`
+    : `<span class="muted">${esc(x.tok)}</span>`).join(" ");
+  const got = parsed.filter(x => x.piece).map(x => x.piece.digits).join("");
+  if (ok) {
+    m3done = true;
+    fb.className = "fb ok"; fb.innerHTML = `Верно! ${read}<br><span class="muted">Enter или «Следующее» — новое число</span>`;
+  } else {
+    const d = decompose(m3num);
+    fb.className = "fb bad";
+    fb.innerHTML = `Не сходится. Из фразы получилось: <b>${got || "ничего"}</b>, нужно <b>${m3num}</b>.<br>${read}
+      <br><span class="muted">Пример верного набора слов:</span> ${d.map(p => `<span class="pill n">${p.digits} — ${capHtml(p.word)}</span>`).join(" ")}
+      <br><span class="muted">Можно исправить фразу и проверить ещё раз.</span>`;
+  }
+  m3count();
+};
+</script>
+</body>
+</html>
