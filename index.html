@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Тренажёр ЦБК</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#2f5d50">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ЦБК">
 <style>
 :root{
   --bg:#f6f4ef; --card:#ffffff; --ink:#1d1b18; --muted:#6f6a61; --line:#e3ded4;
@@ -474,6 +481,11 @@ $("m3-form").onsubmit = e => {
   }
   m3count();
 };
+
+// ===== Работа без интернета (только когда открыто с сайта, не из файла) =====
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
 </script>
 </body>
 </html>
