@@ -244,6 +244,7 @@ function shuffle(a){
 // а в следующих кругах «слабый» элемент встречается по 2–3 раза, пока снова не закрепится.
 // Медленные ответы (заметно дольше вашего обычного темпа в своей группе) тоже делают элемент «слабым»:
 // у него появляются лишние копии в круге, пока не начнёте отвечать быстрее.
+const TYPE_MS_PER_CHAR = 300; // сколько в среднем уходит на ввод одного символа ответа
 function makeScheduler(items, groupOf = () => ""){
   const st = new Map(items.map(k => [k, { weak: 0, need: 0, due: 0, times: [] }]));
   const groupTimes = {};
@@ -253,7 +254,7 @@ function makeScheduler(items, groupOf = () => ""){
     const t = st.get(k).times, g = groupTimes[groupOf(k)] || [];
     if (!t.length || g.length < 6) return 0;
     const avg = t.reduce((a, b) => a + b, 0) / t.length, r = avg / median(g);
-    if (avg < 2000) return 0;
+    if (avg < 1500) return 0;
     const lvl = r > 2.2 ? 2 : r > 1.4 ? 1 : 0;
     return t.length < 2 ? Math.min(lvl, 1) : lvl; // одного долгого ответа мало для «очень медленно»
   }
@@ -280,9 +281,11 @@ function makeScheduler(items, groupOf = () => ""){
       }
       return last = k;
     },
-    answer(k, ok, ms = 0){
+    // len — длина правильного ответа: время ввода вычитаем, сравниваем только время «на подумать»
+    answer(k, ok, ms = 0, len = 0){
       const s = st.get(k);
       if (ok && ms > 0) { // время учитываем только для верных ответов
+        ms = Math.max(300, ms - len * TYPE_MS_PER_CHAR);
         s.times.push(ms); if (s.times.length > 3) s.times.shift();
         const g = groupTimes[groupOf(k)] = groupTimes[groupOf(k)] || [];
         g.push(ms); if (g.length > 60) g.shift();
@@ -412,7 +415,7 @@ $("m1-form").onsubmit = e => {
   } else {
     right = LETTER2DIGIT[key]; ok = norm(raw) === right; label = `${key} → ?`;
   }
-  m1sched.answer(t + ":" + key, ok, ms);
+  m1sched.answer(t + ":" + key, ok, ms, norm(right).length);
   bump(stats.m1, label, ok, ms); stats.m1[label].label = t === "d2l" ? `цифра ${key}` : `буква ${key}`;
   if (!ok) stats.m1[label].wrong.push(raw);
   m1answered = true;
@@ -451,7 +454,7 @@ $("m2-form").onsubmit = e => {
   const raw = $("m2-in").value.trim(); if (!raw) return;
   const ms = qtStop();
   const ok = norm(raw) === norm(WORDS[m2cur]);
-  m2sched.answer(m2cur, ok, ms);
+  m2sched.answer(m2cur, ok, ms, norm(WORDS[m2cur]).length);
   bump(stats.m2, m2cur, ok, ms); if (!ok) stats.m2[m2cur].wrong.push(raw);
   m2answered = true;
   const fb = $("m2-fb"); fb.className = "fb " + (ok ? "ok" : "bad");
