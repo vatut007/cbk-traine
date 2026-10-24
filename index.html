@@ -242,14 +242,26 @@ function shuffle(a){
 // Круг: каждый элемент по разу в случайном порядке — охват равномерный.
 // Ошибка: элемент возвращается через 2–3 вопроса, потом ещё раз через 5–6 (нужно 2 верных подряд),
 // а в следующих кругах «слабый» элемент встречается по 2–3 раза, пока снова не закрепится.
-function makeScheduler(items){
-  const st = new Map(items.map(k => [k, { weak: 0, need: 0, due: 0 }]));
+// Медленные ответы (заметно дольше вашего обычного темпа в своей группе) тоже делают элемент «слабым»:
+// у него появляются лишние копии в круге, пока не начнёте отвечать быстрее.
+function makeScheduler(items, groupOf = () => ""){
+  const st = new Map(items.map(k => [k, { weak: 0, need: 0, due: 0, times: [] }]));
+  const groupTimes = {};
   let bag = [], step = 0, last = null;
+  const median = a => { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+  function slowness(k){ // 0 — нормально, 1 — медленно, 2 — очень медленно
+    const t = st.get(k).times, g = groupTimes[groupOf(k)] || [];
+    if (!t.length || g.length < 6) return 0;
+    const avg = t.reduce((a, b) => a + b, 0) / t.length, r = avg / median(g);
+    if (avg < 2000) return 0;
+    const lvl = r > 2.2 ? 2 : r > 1.4 ? 1 : 0;
+    return t.length < 2 ? Math.min(lvl, 1) : lvl; // одного долгого ответа мало для «очень медленно»
+  }
   function refill(){
     bag = [];
     items.forEach(k => {
       const w = st.get(k).weak;
-      for (let n = 1 + (w >= 1) + (w >= 3); n > 0; n--) bag.push(k);
+      for (let n = Math.min(4, 1 + (w >= 1) + (w >= 3) + slowness(k)); n > 0; n--) bag.push(k);
     });
     shuffle(bag);
   }
@@ -268,8 +280,15 @@ function makeScheduler(items){
       }
       return last = k;
     },
-    answer(k, ok){
+    answer(k, ok, ms = 0){
       const s = st.get(k);
+      if (ok && ms > 0) { // время учитываем только для верных ответов
+        s.times.push(ms); if (s.times.length > 3) s.times.shift();
+        const g = groupTimes[groupOf(k)] = groupTimes[groupOf(k)] || [];
+        g.push(ms); if (g.length > 60) g.shift();
+        // если элемент стал медленным посреди круга — добавим его ещё раз до конца круга
+        if (slowness(k) > 0 && !bag.includes(k)) bag.splice(randInt(Math.min(3, bag.length), bag.length), 0, k);
+      }
       if (!ok) { s.weak = Math.min(s.weak + 2, 4); s.need = 2; s.due = step + randInt(2, 3); }
       else if (s.need > 0) { if (--s.need > 0) s.due = step + randInt(5, 6); }
       else s.weak = Math.max(0, s.weak - 1);
@@ -277,18 +296,43 @@ function makeScheduler(items){
   };
 }
 
+// ===== Таймер ответа =====
+// Идёт только пока вопрос на экране: пауза, если вкладка/приложение скрыты, окно не в фокусе,
+// открыто окно статистики/таблицы или выбран другой режим.
+const qt = { owner: null, running: false, acc: 0, since: null, focused: true };
+function qtSync(){
+  const act = qt.running && qt.focused && !document.hidden && mode === qt.owner && !$("ov").classList.contains("on");
+  if (act && qt.since === null) qt.since = performance.now();
+  else if (!act && qt.since !== null) { qt.acc += performance.now() - qt.since; qt.since = null; }
+}
+function qtStart(owner){ qt.owner = owner; qt.running = true; qt.acc = 0; qt.since = null; qtSync(); }
+function qtStop(){ // возвращает мс, не больше 30 с (на случай, если отошли, не закрыв приложение)
+  qtSync(); qt.running = false; qtSync();
+  return Math.min(Math.round(qt.acc), 30000);
+}
+document.addEventListener("visibilitychange", qtSync);
+window.addEventListener("pagehide", qtSync);
+window.addEventListener("blur", () => { qt.focused = false; qtSync(); });
+window.addEventListener("focus", () => { qt.focused = true; qtSync(); });
+const fmtSec = ms => (ms / 1000).toFixed(1).replace(".", ",") + " с";
+function avgTimeText(obj){
+  let ms = 0, n = 0; Object.values(obj).forEach(s => { ms += s.ms || 0; n += s.tn || 0; });
+  return n ? `, среднее время: ${fmtSec(ms / n)}` : "";
+}
+
 // ===== Вкладки =====
 let mode = "m1";
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
-  mode = t.dataset.mode;
+  mode = t.dataset.mode; qtSync();
   document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
   ["m1","m2","m3"].forEach(m => show($(m), m === mode));
 });
 
 // ===== Оверлей =====
-function openOv(title, html){ $("ov-title").textContent = title; $("ov-body").innerHTML = html; $("ov").classList.add("on"); }
-$("ov-close").onclick = () => $("ov").classList.remove("on");
-$("ov").onclick = e => { if (e.target === $("ov")) $("ov").classList.remove("on"); };
+function openOv(title, html){ $("ov-title").textContent = title; $("ov-body").innerHTML = html; $("ov").classList.add("on"); qtSync(); }
+const closeOv = () => { $("ov").classList.remove("on"); qtSync(); };
+$("ov-close").onclick = closeOv;
+$("ov").onclick = e => { if (e.target === $("ov")) closeOv(); };
 
 function cbkGridHtml(){
   return `<div class="cbk-grid">` + [1,2,3,4,5,6,7,8,9,0].map(d =>
@@ -303,9 +347,10 @@ $("refBtn").onclick = () => {
 
 // ===== Статистика =====
 const stats = { m1: {}, m2: {}, m3: [] };
-function bump(obj, key, ok){
-  obj[key] = obj[key] || { n:0, ok:0, wrong:[] };
+function bump(obj, key, ok, ms = 0){
+  obj[key] = obj[key] || { n:0, ok:0, wrong:[], ms:0, tn:0 };
   obj[key].n++; if (ok) obj[key].ok++;
+  if (ms > 0) { obj[key].ms += ms; obj[key].tn++; }
 }
 function statTable(obj, keyTitle, sortFn){
   const keys = Object.keys(obj).sort(sortFn);
@@ -314,10 +359,10 @@ function statTable(obj, keyTitle, sortFn){
   const rows = keys.map(k => {
     const s = obj[k]; tn += s.n; tok += s.ok;
     const wrong = s.wrong.length ? s.wrong.map(w => `<span class="pill bad">${esc(w)}</span>`).join("") : "";
-    return `<tr><td><b>${esc(s.label || k)}</b></td><td>${s.n}</td><td>${s.ok}</td><td>${s.n - s.ok}</td><td>${wrong}</td></tr>`;
+    return `<tr><td><b>${esc(s.label || k)}</b></td><td>${s.n}</td><td>${s.ok}</td><td>${s.n - s.ok}</td><td>${s.tn ? fmtSec(s.ms / s.tn) : "—"}</td><td>${wrong}</td></tr>`;
   }).join("");
   return `<p>Всего ответов: <b>${tn}</b>, верно: <b>${tok}</b> (${tn ? Math.round(tok*100/tn) : 0}%)</p>
-    <div class="tbl"><table><tr><th>${keyTitle}</th><th>Раз</th><th>Верно</th><th>Ошибок</th><th>Что ввели</th></tr>${rows}</table></div>`;
+    <div class="tbl"><table><tr><th>${keyTitle}</th><th>Раз</th><th>Верно</th><th>Ошибок</th><th>Ср. время</th><th>Что ввели</th></tr>${rows}</table></div>`;
 }
 $("statsBtn").onclick = () => {
   if (mode === "m1") openOv("Статистика: буквы ЦБК", statTable(stats.m1, "Вопрос", (a,b)=>a.localeCompare(b,"ru")));
@@ -343,22 +388,23 @@ function m1next(){
   $("m1-in").value = ""; $("m1-in").placeholder = t === "d2l" ? "две буквы, например гж" : "цифра";
   $("m1-in").inputMode = t === "d2l" ? "text" : "numeric";
   $("m1-fb").textContent = ""; $("m1-fb").className = "fb";
-  $("m1-in").focus();
+  $("m1-in").focus(); qtStart("m1");
 }
 $("m1-start").onclick = () => {
   if (!$("m1-d2l").checked && !$("m1-l2d").checked) $("m1-d2l").checked = true;
   const items = [];
   if ($("m1-d2l").checked) "1234567890".split("").forEach(d => items.push("d2l:" + d));
   if ($("m1-l2d").checked) Object.keys(LETTER2DIGIT).forEach(l => items.push("l2d:" + l));
-  m1sched = makeScheduler(items);
+  m1sched = makeScheduler(items, k => k.split(":")[0]);
   show($("m1-learn"), false); show($("m1-quiz"), true); m1next(); m1count();
 };
-$("m1-stop").onclick = () => { show($("m1-quiz"), false); show($("m1-learn"), true); $("statsBtn").click(); };
-function m1count(){ let n=0, ok=0; Object.values(stats.m1).forEach(s => { n+=s.n; ok+=s.ok; }); $("m1-count").textContent = `Ответов: ${n}, верно: ${ok}`; }
+$("m1-stop").onclick = () => { qt.running = false; qtSync(); show($("m1-quiz"), false); show($("m1-learn"), true); $("statsBtn").click(); };
+function m1count(){ let n=0, ok=0; Object.values(stats.m1).forEach(s => { n+=s.n; ok+=s.ok; }); $("m1-count").textContent = `Ответов: ${n}, верно: ${ok}${avgTimeText(stats.m1)}`; }
 $("m1-form").onsubmit = e => {
   e.preventDefault();
   if (m1answered) { m1next(); return; }
   const raw = $("m1-in").value.trim(); if (!raw) return;
+  const ms = qtStop();
   const { t, key } = m1cur; let ok, right, label;
   if (t === "d2l") {
     const got = [...new Set(norm(raw).toUpperCase().split(""))].sort().join("");
@@ -366,13 +412,13 @@ $("m1-form").onsubmit = e => {
   } else {
     right = LETTER2DIGIT[key]; ok = norm(raw) === right; label = `${key} → ?`;
   }
-  m1sched.answer(t + ":" + key, ok);
-  bump(stats.m1, label, ok); stats.m1[label].label = t === "d2l" ? `цифра ${key}` : `буква ${key}`;
+  m1sched.answer(t + ":" + key, ok, ms);
+  bump(stats.m1, label, ok, ms); stats.m1[label].label = t === "d2l" ? `цифра ${key}` : `буква ${key}`;
   if (!ok) stats.m1[label].wrong.push(raw);
   m1answered = true;
   const fb = $("m1-fb");
   fb.className = "fb " + (ok ? "ok" : "bad");
-  fb.innerHTML = (ok ? "Верно! " : `Неверно. Правильно: <b>${right}</b>. `) + `<span class="muted">Enter — дальше</span>`;
+  fb.innerHTML = (ok ? "Верно! " : `Неверно. Правильно: <b>${right}</b>. `) + `<span class="muted">${fmtSec(ms)} · Enter — дальше</span>`;
   m1count();
   if (ok) setTimeout(() => { if (m1answered && m1cur.key === key) m1next(); }, 700);
 };
@@ -392,23 +438,24 @@ $("m2-show").onclick = () => {
   $("m2-start").disabled = !m2pool.length;
 };
 $("m2-start").onclick = () => { m2sched = makeScheduler(m2pool); show($("m2-setup"), false); show($("m2-learn"), false); show($("m2-quiz"), true); m2next(); m2count(); };
-$("m2-stop").onclick = () => { show($("m2-quiz"), false); show($("m2-setup"), true); show($("m2-learn"), true); $("statsBtn").click(); };
+$("m2-stop").onclick = () => { qt.running = false; qtSync(); show($("m2-quiz"), false); show($("m2-setup"), true); show($("m2-learn"), true); $("statsBtn").click(); };
 function m2next(){
   m2cur = m2sched.next(); m2answered = false;
   $("m2-q").textContent = m2cur; $("m2-in").value = "";
-  $("m2-fb").textContent = ""; $("m2-fb").className = "fb"; $("m2-in").focus();
+  $("m2-fb").textContent = ""; $("m2-fb").className = "fb"; $("m2-in").focus(); qtStart("m2");
 }
-function m2count(){ let n=0, ok=0; Object.values(stats.m2).forEach(s => { n+=s.n; ok+=s.ok; }); $("m2-count").textContent = `Ответов: ${n}, верно: ${ok}`; }
+function m2count(){ let n=0, ok=0; Object.values(stats.m2).forEach(s => { n+=s.n; ok+=s.ok; }); $("m2-count").textContent = `Ответов: ${n}, верно: ${ok}${avgTimeText(stats.m2)}`; }
 $("m2-form").onsubmit = e => {
   e.preventDefault();
   if (m2answered) { m2next(); return; }
   const raw = $("m2-in").value.trim(); if (!raw) return;
+  const ms = qtStop();
   const ok = norm(raw) === norm(WORDS[m2cur]);
-  m2sched.answer(m2cur, ok);
-  bump(stats.m2, m2cur, ok); if (!ok) stats.m2[m2cur].wrong.push(raw);
+  m2sched.answer(m2cur, ok, ms);
+  bump(stats.m2, m2cur, ok, ms); if (!ok) stats.m2[m2cur].wrong.push(raw);
   m2answered = true;
   const fb = $("m2-fb"); fb.className = "fb " + (ok ? "ok" : "bad");
-  fb.innerHTML = (ok ? "Верно! " : `Неверно. Правильно: <b>${capHtml(WORDS[m2cur])}</b>. `) + `<span class="muted">Enter — дальше</span>`;
+  fb.innerHTML = (ok ? "Верно! " : `Неверно. Правильно: <b>${capHtml(WORDS[m2cur])}</b>. `) + `<span class="muted">${fmtSec(ms)} · Enter — дальше</span>`;
   m2count();
   const cur = m2cur;
   if (ok) setTimeout(() => { if (m2answered && m2cur === cur) m2next(); }, 700);
