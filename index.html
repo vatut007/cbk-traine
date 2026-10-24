@@ -233,9 +233,48 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":
 function capHtml(w){ // заглавные буквы — код
   return [...w].map(ch => (ch !== ch.toLowerCase()) ? `<span class="cap">${ch}</span>` : ch).join("");
 }
-function pickNext(pool, last){ // случайно, без повтора подряд
-  if (pool.length < 2) return pool[0];
-  let x; do { x = rnd(pool); } while (x === last); return x;
+const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+function shuffle(a){
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+// Планировщик вопросов.
+// Круг: каждый элемент по разу в случайном порядке — охват равномерный.
+// Ошибка: элемент возвращается через 2–3 вопроса, потом ещё раз через 5–6 (нужно 2 верных подряд),
+// а в следующих кругах «слабый» элемент встречается по 2–3 раза, пока снова не закрепится.
+function makeScheduler(items){
+  const st = new Map(items.map(k => [k, { weak: 0, need: 0, due: 0 }]));
+  let bag = [], step = 0, last = null;
+  function refill(){
+    bag = [];
+    items.forEach(k => {
+      const w = st.get(k).weak;
+      for (let n = 1 + (w >= 1) + (w >= 3); n > 0; n--) bag.push(k);
+    });
+    shuffle(bag);
+  }
+  return {
+    next(){
+      step++;
+      const due = items.filter(k => { const s = st.get(k); return s.need > 0 && s.due <= step && k !== last; })
+        .sort((a, b) => st.get(a).due - st.get(b).due);
+      let k;
+      if (due.length) k = due[0];
+      else {
+        if (!bag.length) refill();
+        let i = bag.findIndex(x => x !== last);
+        if (i < 0) { refill(); i = bag.findIndex(x => x !== last); }
+        k = bag.splice(Math.max(i, 0), 1)[0];
+      }
+      return last = k;
+    },
+    answer(k, ok){
+      const s = st.get(k);
+      if (!ok) { s.weak = Math.min(s.weak + 2, 4); s.need = 2; s.due = step + randInt(2, 3); }
+      else if (s.need > 0) { if (--s.need > 0) s.due = step + randInt(5, 6); }
+      else s.weak = Math.max(0, s.weak - 1);
+    }
+  };
 }
 
 // ===== Вкладки =====
@@ -295,16 +334,10 @@ $("statsBtn").onclick = () => {
 // ===== Режим 1: буквы ЦБК =====
 const LETTER2DIGIT = {};
 Object.entries(CBK).forEach(([d, ls]) => [...ls].forEach(l => LETTER2DIGIT[l] = d));
-let m1cur = null, m1last = null, m1answered = false;
+let m1cur = null, m1sched = null, m1answered = false;
 function m1next(){
-  const types = [];
-  if ($("m1-d2l").checked) types.push("d2l");
-  if ($("m1-l2d").checked) types.push("l2d");
-  const t = rnd(types);
-  let q;
-  if (t === "d2l") q = { t, key: pickNext("1234567890".split(""), m1last && m1last.split(":")[1]) };
-  else q = { t, key: pickNext(Object.keys(LETTER2DIGIT), m1last && m1last.split(":")[1]) };
-  m1cur = q; m1last = t + ":" + q.key; m1answered = false;
+  const [t, key] = m1sched.next().split(":");
+  m1cur = { t, key }; m1answered = false;
   $("m1-ask").textContent = t === "d2l" ? "Какие две буквы у этой цифры?" : "Какая цифра у этой буквы?";
   $("m1-q").textContent = q.key;
   $("m1-in").value = ""; $("m1-in").placeholder = t === "d2l" ? "две буквы, например гж" : "цифра";
@@ -314,6 +347,10 @@ function m1next(){
 }
 $("m1-start").onclick = () => {
   if (!$("m1-d2l").checked && !$("m1-l2d").checked) $("m1-d2l").checked = true;
+  const items = [];
+  if ($("m1-d2l").checked) "1234567890".split("").forEach(d => items.push("d2l:" + d));
+  if ($("m1-l2d").checked) Object.keys(LETTER2DIGIT).forEach(l => items.push("l2d:" + l));
+  m1sched = makeScheduler(items);
   show($("m1-learn"), false); show($("m1-quiz"), true); m1next(); m1count();
 };
 $("m1-stop").onclick = () => { show($("m1-quiz"), false); show($("m1-learn"), true); $("statsBtn").click(); };
@@ -329,6 +366,7 @@ $("m1-form").onsubmit = e => {
   } else {
     right = LETTER2DIGIT[key]; ok = norm(raw) === right; label = `${key} → ?`;
   }
+  m1sched.answer(t + ":" + key, ok);
   bump(stats.m1, label, ok); stats.m1[label].label = t === "d2l" ? `цифра ${key}` : `буква ${key}`;
   if (!ok) stats.m1[label].wrong.push(raw);
   m1answered = true;
@@ -340,7 +378,7 @@ $("m1-form").onsubmit = e => {
 };
 
 // ===== Режим 2: слова =====
-let m2pool = [], m2cur = null, m2answered = false;
+let m2pool = [], m2cur = null, m2sched = null, m2answered = false;
 $("m2-show").onclick = () => {
   let a = Math.max(1, Math.min(100, +$("m2-from").value || 1));
   let b = Math.max(1, Math.min(100, +$("m2-to").value || 1));
@@ -353,10 +391,10 @@ $("m2-show").onclick = () => {
   show($("m2-learn"), true); show($("m2-quiz"), false);
   $("m2-start").disabled = !m2pool.length;
 };
-$("m2-start").onclick = () => { show($("m2-setup"), false); show($("m2-learn"), false); show($("m2-quiz"), true); m2next(); m2count(); };
+$("m2-start").onclick = () => { m2sched = makeScheduler(m2pool); show($("m2-setup"), false); show($("m2-learn"), false); show($("m2-quiz"), true); m2next(); m2count(); };
 $("m2-stop").onclick = () => { show($("m2-quiz"), false); show($("m2-setup"), true); show($("m2-learn"), true); $("statsBtn").click(); };
 function m2next(){
-  m2cur = pickNext(m2pool, m2cur); m2answered = false;
+  m2cur = m2sched.next(); m2answered = false;
   $("m2-q").textContent = m2cur; $("m2-in").value = "";
   $("m2-fb").textContent = ""; $("m2-fb").className = "fb"; $("m2-in").focus();
 }
@@ -366,6 +404,7 @@ $("m2-form").onsubmit = e => {
   if (m2answered) { m2next(); return; }
   const raw = $("m2-in").value.trim(); if (!raw) return;
   const ok = norm(raw) === norm(WORDS[m2cur]);
+  m2sched.answer(m2cur, ok);
   bump(stats.m2, m2cur, ok); if (!ok) stats.m2[m2cur].wrong.push(raw);
   m2answered = true;
   const fb = $("m2-fb"); fb.className = "fb " + (ok ? "ok" : "bad");
@@ -393,13 +432,19 @@ function decompose(num){
   }
   return go(0);
 }
+// Из нескольких подходящих чисел берём то, где цифры выпадали реже всего — так цифры охватываются равномерно
+const m3digits = Array(10).fill(0);
 function genNumber(len){
-  for (let t = 0; t < 5000; t++) {
+  let best = null, bestScore = Infinity, found = 0;
+  for (let t = 0; t < 5000 && found < 12; t++) {
     let s = String(1 + Math.floor(Math.random()*9));
     while (s.length < len) s += Math.floor(Math.random()*10);
-    if (decompose(s)) return s;
+    if (!decompose(s)) continue;
+    found++;
+    const score = [...s].reduce((a, c) => a + m3digits[c], 0) + Math.random();
+    if (score < bestScore) { best = s; bestScore = score; }
   }
-  return null;
+  return best;
 }
 
 // Сопоставление слова фразы со словом таблицы с учётом склонений
@@ -440,12 +485,18 @@ function checkPhrase(num, parsed){
   return go(0, 0);
 }
 
-let m3num = null, m3done = false;
-$("m3-start").onclick = () => { show($("m3-setup"), false); show($("m3-quiz"), true); m3next(); m3count(); };
+let m3num = null, m3done = false, m3missed = false, m3step = 0, m3retry = [];
+$("m3-start").onclick = () => { m3retry = []; m3num = null; show($("m3-setup"), false); show($("m3-quiz"), true); m3next(); m3count(); };
 $("m3-stop").onclick = () => { show($("m3-quiz"), false); show($("m3-setup"), true); $("statsBtn").click(); };
 $("m3-next").onclick = () => m3next();
 function m3next(){
-  m3num = genNumber(+$("m3-len").value); m3done = false;
+  // число, на котором ошиблись и не исправили, вернётся через 2–3 числа
+  if (m3num && m3missed && !m3done) m3retry.push({ num: m3num, due: m3step + randInt(2, 3) });
+  m3step++;
+  const i = m3retry.findIndex(r => r.due <= m3step);
+  m3num = i >= 0 ? m3retry.splice(i, 1)[0].num : genNumber(+$("m3-len").value);
+  [...m3num].forEach(c => m3digits[c]++);
+  m3done = false; m3missed = false;
   $("m3-q").textContent = m3num; $("m3-in").value = "";
   $("m3-fb").textContent = ""; $("m3-fb").className = "fb"; $("m3-in").focus();
 }
@@ -464,6 +515,7 @@ $("m3-form").onsubmit = e => {
   const parsed = parsePhrase(text);
   const ok = checkPhrase(m3num, parsed);
   stats.m3.push({ num: m3num, phrase: text, ok });
+  if (!ok) m3missed = true;
   const fb = $("m3-fb"); fb.style.background = "";
   const read = parsed.map(x => x.piece
     ? `<span class="pill ${ok ? "ok" : "n"}">${esc(x.tok)} = ${norm(x.piece.word) === "мама" ? "100/00" : x.piece.digits}</span>`
