@@ -387,7 +387,7 @@ function m1next(){
   const [t, key] = m1sched.next().split(":");
   m1cur = { t, key }; m1answered = false;
   $("m1-ask").textContent = t === "d2l" ? "Какие две буквы у этой цифры?" : "Какая цифра у этой буквы?";
-  $("m1-q").textContent = q.key;
+  $("m1-q").textContent = key;
   $("m1-in").value = ""; $("m1-in").placeholder = t === "d2l" ? "две буквы, например гж" : "цифра";
   $("m1-in").inputMode = t === "d2l" ? "text" : "numeric";
   $("m1-fb").textContent = ""; $("m1-fb").className = "fb";
